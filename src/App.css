@@ -1,0 +1,483 @@
+:root {
+  --bg: #0f1117;
+  --card-bg: #1a1d27;
+  --text: #f1f1f6;
+  --muted: #9094a6;
+  --accent: #4ade80;
+  --accent-border: #4ade8055;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.app-header h1 {
+  font-size: 22px;
+  margin: 0;
+  flex: 1 0 100%;
+}
+
+.app-header input[type='date'] {
+  flex: 1;
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.goals-toggle {
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.goals-panel {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.goals-panel label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.goals-panel input {
+  width: 90px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.card-icon {
+  font-size: 18px;
+}
+
+.card-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.card-value {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.card-unit {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.progress-track {
+  height: 6px;
+  background: #2a2e3a;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+.goal-text {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.card-actions button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.card-actions input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 6px;
+  text-align: center;
+}
+
+.history-section {
+  margin-top: 24px;
+}
+
+.history-section h2 {
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.history-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.history-block {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.history-title {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.history-chart {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 80px;
+  gap: 4px;
+}
+
+.history-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  height: 100%;
+}
+
+.history-bar-track {
+  flex: 1;
+  width: 60%;
+  display: flex;
+  align-items: flex-end;
+  background: #2a2e3a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.history-bar-fill {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+}
+
+.history-bar-label {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Coffee card */
+.coffee-card {
+  grid-column: span 2;
+}
+
+.coffee-card .card-header {
+  margin-bottom: 10px;
+}
+
+.coffee-total {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.coffee-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #2a2e3a;
+}
+
+.coffee-row:first-of-type {
+  border-top: none;
+}
+
+.coffee-row-label {
+  flex: 1;
+  font-size: 14px;
+}
+
+.coffee-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coffee-row-actions button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+}
+
+.coffee-row-value {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.coffee-row-goal {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Food log */
+.foodlog-card {
+  margin-top: 12px;
+}
+
+.macro-summary {
+  display: flex;
+  gap: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.macro-summary .card-unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.food-search {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.food-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.food-option {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid #2a2e3a;
+  border-radius: 16px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.food-option.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.online-results {
+  margin-bottom: 10px;
+}
+
+.online-status {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.online-error {
+  color: #f87171;
+}
+
+.food-option.online {
+  border-color: #38bdf855;
+}
+
+.food-option.online.active {
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.food-add-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.food-add-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.food-add-row input {
+  width: 64px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 6px;
+  text-align: center;
+}
+
+.food-add-row button {
+  background: var(--accent);
+  color: #0f1117;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: 600;
+}
+
+.food-quick-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  padding: 0 0 0 6px;
+}
+
+.manual-toggle {
+  font-size: 12px;
+  margin-bottom: 6px;
+  padding: 4px 0;
+  display: block;
+}
+
+.food-manual-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.food-manual-row input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 6px;
+  width: 100%;
+}
+
+.food-manual-row button {
+  background: var(--accent);
+  color: #0f1117;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 600;
+}
+
+.food-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.food-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.food-list-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.food-list-macros {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 0;
+}
