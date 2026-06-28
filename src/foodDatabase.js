@@ -77,6 +77,9 @@ export const FOODS = [
   { id: 'ton-balik', name: 'Ton balığı (suda, süzülmüş)', kcal100: 116, protein100: 26, unit: { label: '1 konserve', grams: 120 } },
   { id: 'yesillik', name: 'Yeşillik (karışık salata)', kcal100: 20, protein100: 1.5, unit: { label: '1 kase', grams: 50 } },
   { id: 'konserve-misir', name: 'Konserve mısır', kcal100: 86, protein100: 3.3, unit: { label: '3 yemek kaşığı', grams: 50 } },
+  { id: 'yaban-mersini', name: 'Yaban mersini', kcal100: 57, protein100: 0.7, unit: { label: '1 avuç', grams: 80 } },
+  { id: 'laktozsuz-yogurt', name: 'Laktozsuz yoğurt', kcal100: 61, protein100: 3.5, unit: { label: '1 kase', grams: 200 } },
+  { id: 'nohut-cipsi', name: 'Nohut cipsi', kcal100: 400, protein100: 18, unit: { label: '1 paket', grams: 30 } },
 ]
 
 export function calcMacros(food, grams) {

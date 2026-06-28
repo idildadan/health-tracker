@@ -4,7 +4,9 @@ export async function searchOpenFoodFacts(query, signal) {
   const params = new URLSearchParams({
     search_terms: query,
     page_size: '10',
-    fields: 'product_name,brands,nutriments',
+    lc: 'tr', // ürün adlarını Türkçe döndürmesi için
+    cc: 'tr', // Türkiye'deki ürünleri öncelikli getirmesi için
+    fields: 'product_name,product_name_tr,brands,nutriments',
   })
 
   let res
@@ -21,10 +23,11 @@ export async function searchOpenFoodFacts(query, signal) {
   const data = await res.json()
 
   return (data.products || [])
-    .filter((p) => p.product_name && p.nutriments?.['energy-kcal_100g'] != null)
+    .map((p) => ({ ...p, name: p.product_name_tr || p.product_name }))
+    .filter((p) => p.name && p.nutriments?.['energy-kcal_100g'] != null)
     .map((p, i) => ({
-      id: `off-${i}-${p.product_name}`,
-      name: p.brands ? `${p.product_name} (${p.brands})` : p.product_name,
+      id: `off-${i}-${p.name}`,
+      name: p.brands ? `${p.name} (${p.brands})` : p.name,
       kcal100: p.nutriments['energy-kcal_100g'],
       protein100: p.nutriments.proteins_100g || 0,
       unit: { label: '100g', grams: 100 },

@@ -115,19 +115,19 @@ function App() {
             onSet={(value) => update(t.field, value)}
           />
         ))}
-        <CoffeeCard
-          turkish={day.turkishCoffee}
-          filter={day.filterCoffee}
-          caffeine={day.caffeine}
-          goal={goals.caffeine}
-          onIncrement={increment}
-        />
         <WeightCard
           value={day.weight}
           goal={goals.weight}
           previous={previousWeight(date)}
           onSet={(value) => update('weight', value)}
           onIncrement={(amount) => increment('weight', amount)}
+        />
+        <CoffeeCard
+          turkish={day.turkishCoffee}
+          filter={day.filterCoffee}
+          caffeine={day.caffeine}
+          goal={goals.caffeine}
+          onIncrement={increment}
         />
       </main>
 
