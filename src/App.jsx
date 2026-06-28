@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useDailyData } from './useDailyData'
 import TrackerCard from './components/TrackerCard'
 import CoffeeCard from './components/CoffeeCard'
+import WeightCard from './components/WeightCard'
+import StreakBadge from './components/StreakBadge'
 import FoodLog from './components/FoodLog'
 import HistoryChart from './components/HistoryChart'
 import './App.css'
@@ -19,6 +21,7 @@ const HISTORY_TRACKERS = [
   { field: 'calories', icon: '🔥', label: 'Kalori', goal: 'calories', color: '#f97316' },
   { field: 'protein', icon: '🥩', label: 'Protein', goal: 'protein', color: '#f43f5e' },
   { field: 'sleep', icon: '😴', label: 'Uyku', goal: 'sleep', color: '#818cf8' },
+  { field: 'weight', icon: '⚖️', label: 'Kilo', goal: 'weight', color: '#c084fc' },
 ]
 
 function App() {
@@ -33,6 +36,8 @@ function App() {
     removeFood,
     updateGoal,
     history,
+    previousWeight,
+    streak,
   } = useDailyData()
   const [showGoals, setShowGoals] = useState(false)
   const last7 = history(7)
@@ -41,6 +46,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>Sağlık Takibi</h1>
+        <StreakBadge streak={streak} />
         <input
           type="date"
           value={date}
@@ -83,6 +89,15 @@ function App() {
             😴 Uyku hedefi (saat)
             <input type="number" value={goals.sleep} onChange={(e) => updateGoal('sleep', Number(e.target.value) || 0)} />
           </label>
+          <label>
+            ⚖️ Hedef kilo (kg)
+            <input
+              type="number"
+              step="0.1"
+              value={goals.weight}
+              onChange={(e) => updateGoal('weight', Number(e.target.value) || 0)}
+            />
+          </label>
         </section>
       )}
 
@@ -106,6 +121,13 @@ function App() {
           caffeine={day.caffeine}
           goal={goals.caffeine}
           onIncrement={increment}
+        />
+        <WeightCard
+          value={day.weight}
+          goal={goals.weight}
+          previous={previousWeight(date)}
+          onSet={(value) => update('weight', value)}
+          onIncrement={(amount) => increment('weight', amount)}
         />
       </main>
 

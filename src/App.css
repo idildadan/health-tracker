@@ -39,6 +39,23 @@ body {
   flex: 1 0 100%;
 }
 
+.streak-badge {
+  flex: 1 0 100%;
+  font-size: 13px;
+  color: #fbbf24;
+  background: #fbbf2418;
+  border: 1px solid #fbbf2440;
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: inline-block;
+}
+
+.streak-badge.streak-zero {
+  color: var(--muted);
+  background: var(--card-bg);
+  border-color: #2a2e3a;
+}
+
 .app-header input[type='date'] {
   flex: 1;
   background: var(--card-bg);
@@ -114,6 +131,24 @@ body {
   font-size: 22px;
   font-weight: 700;
   margin-bottom: 8px;
+}
+
+.weight-diff {
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.weight-diff.down {
+  color: #4ade80;
+  background: #4ade8018;
+}
+
+.weight-diff.up {
+  color: #f87171;
+  background: #f8717118;
 }
 
 .card-unit {

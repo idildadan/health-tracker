@@ -24,6 +24,7 @@ const defaultGoals = {
   calories: 2000,
   protein: 100, // g
   sleep: 8, // hours
+  weight: 70, // kg, hedef kilo
 }
 
 const defaultDay = {
@@ -34,7 +35,42 @@ const defaultDay = {
   calories: 0,
   protein: 0,
   sleep: 0,
+  weight: 0,
   foods: [],
+}
+
+// Bir günün "tamamlanmış" sayılması için en az bu kadar kategoride kayıt olmalı.
+const COMPLETION_THRESHOLD = 4
+
+function isDayComplete(day) {
+  const checks = [
+    day.steps > 0,
+    day.water > 0,
+    day.turkishCoffee > 0 || day.filterCoffee > 0,
+    day.calories > 0,
+    day.sleep > 0,
+    day.weight > 0,
+  ]
+  return checks.filter(Boolean).length >= COMPLETION_THRESHOLD
+}
+
+function computeStreak(allData) {
+  let streak = 0
+  let first = true
+  const cursor = new Date()
+  while (true) {
+    const key = cursor.toISOString().slice(0, 10)
+    const day = { ...defaultDay, ...allData[key] }
+    const complete = isDayComplete(day)
+    if (complete) {
+      streak++
+    } else if (!(first && key === todayKey())) {
+      break
+    }
+    first = false
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return streak
 }
 
 function loadAllData() {
@@ -79,7 +115,8 @@ export function useDailyData() {
 
   function increment(field, amount) {
     const current = (allData[date] || defaultDay)[field] || 0
-    update(field, Math.max(0, current + amount))
+    const next = Math.round((current + amount) * 100) / 100
+    update(field, Math.max(0, next))
   }
 
   function addFood(entry) {
@@ -130,5 +167,28 @@ export function useDailyData() {
     return result
   }
 
-  return { date, setDate, day, goals, update, increment, addFood, removeFood, updateGoal, history }
+  function previousWeight(beforeDate) {
+    const keys = Object.keys(allData)
+      .filter((k) => k < beforeDate && allData[k]?.weight > 0)
+      .sort()
+    if (keys.length === 0) return null
+    return allData[keys[keys.length - 1]].weight
+  }
+
+  const streak = computeStreak(allData)
+
+  return {
+    date,
+    setDate,
+    day,
+    goals,
+    update,
+    increment,
+    addFood,
+    removeFood,
+    updateGoal,
+    history,
+    previousWeight,
+    streak,
+  }
 }
