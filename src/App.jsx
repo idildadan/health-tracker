@@ -4,6 +4,7 @@ import TrackerCard from './components/TrackerCard'
 import CoffeeCard from './components/CoffeeCard'
 import WeightCard from './components/WeightCard'
 import StreakBadge from './components/StreakBadge'
+import GoalInput from './components/GoalInput'
 import FoodLog from './components/FoodLog'
 import HistoryChart from './components/HistoryChart'
 import './App.css'
@@ -62,41 +63,31 @@ function App() {
         <section className="goals-panel">
           <label>
             👟 Adım hedefi
-            <input type="number" value={goals.steps} onChange={(e) => updateGoal('steps', Number(e.target.value) || 0)} />
+            <GoalInput value={goals.steps} onChange={(v) => updateGoal('steps', v)} />
           </label>
           <label>
             💧 Su hedefi (ml)
-            <input type="number" value={goals.water} onChange={(e) => updateGoal('water', Number(e.target.value) || 0)} />
+            <GoalInput value={goals.water} onChange={(v) => updateGoal('water', v)} />
           </label>
           <label>
             ☕ Kafein hedefi (doz)
-            <input
-              type="number"
-              step="0.5"
-              value={goals.caffeine}
-              onChange={(e) => updateGoal('caffeine', Number(e.target.value) || 0)}
-            />
+            <GoalInput step="0.5" value={goals.caffeine} onChange={(v) => updateGoal('caffeine', v)} />
           </label>
           <label>
             🔥 Kalori hedefi
-            <input type="number" value={goals.calories} onChange={(e) => updateGoal('calories', Number(e.target.value) || 0)} />
+            <GoalInput value={goals.calories} onChange={(v) => updateGoal('calories', v)} />
           </label>
           <label>
             🥩 Protein hedefi (g)
-            <input type="number" value={goals.protein} onChange={(e) => updateGoal('protein', Number(e.target.value) || 0)} />
+            <GoalInput value={goals.protein} onChange={(v) => updateGoal('protein', v)} />
           </label>
           <label>
             😴 Uyku hedefi (saat)
-            <input type="number" value={goals.sleep} onChange={(e) => updateGoal('sleep', Number(e.target.value) || 0)} />
+            <GoalInput step="0.5" value={goals.sleep} onChange={(v) => updateGoal('sleep', v)} />
           </label>
           <label>
             ⚖️ Hedef kilo (kg)
-            <input
-              type="number"
-              step="0.1"
-              value={goals.weight}
-              onChange={(e) => updateGoal('weight', Number(e.target.value) || 0)}
-            />
+            <GoalInput step="0.1" value={goals.weight} onChange={(v) => updateGoal('weight', v)} />
           </label>
         </section>
       )}

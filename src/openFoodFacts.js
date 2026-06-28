@@ -4,8 +4,7 @@ export async function searchOpenFoodFacts(query, signal) {
   const params = new URLSearchParams({
     search_terms: query,
     page_size: '10',
-    lc: 'tr', // ürün adlarını Türkçe döndürmesi için
-    cc: 'tr', // Türkiye'deki ürünleri öncelikli getirmesi için
+    lc: 'tr', // ürün adlarının Türkçe çevirisi varsa onu döndür
     fields: 'product_name,product_name_tr,brands,nutriments',
   })
 
