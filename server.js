@@ -6,6 +6,97 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 4173
 
+// Türkçe yiyecek terimlerinin İngilizce karşılıkları. OFF'un ürün veritabanı çoğunlukla
+// İngilizce isim taşıdığı için "yumurta" gibi tek başına Türkçe sorgular eşleşmiyor.
+// Sorguyu "yumurta egg" şeklinde genişletip her iki dilden sonuç çekiyoruz.
+const TR_EN_FOOD = {
+  yumurta: 'egg',
+  yoğurt: 'yogurt',
+  yogurt: 'yogurt',
+  süt: 'milk',
+  sut: 'milk',
+  peynir: 'cheese',
+  ekmek: 'bread',
+  tavuk: 'chicken',
+  balık: 'fish',
+  balik: 'fish',
+  somon: 'salmon',
+  ton: 'tuna',
+  et: 'meat',
+  kıyma: 'minced meat',
+  pirinç: 'rice',
+  pirinc: 'rice',
+  makarna: 'pasta',
+  mercimek: 'lentil',
+  nohut: 'chickpea',
+  fasulye: 'beans',
+  yulaf: 'oats',
+  bal: 'honey',
+  reçel: 'jam',
+  recel: 'jam',
+  zeytin: 'olive',
+  badem: 'almond',
+  ceviz: 'walnut',
+  fındık: 'hazelnut',
+  findik: 'hazelnut',
+  çikolata: 'chocolate',
+  cikolata: 'chocolate',
+  kahve: 'coffee',
+  çay: 'tea',
+  cay: 'tea',
+  muz: 'banana',
+  elma: 'apple',
+  portakal: 'orange',
+  çilek: 'strawberry',
+  cilek: 'strawberry',
+  domates: 'tomato',
+  patates: 'potato',
+  havuç: 'carrot',
+  havuc: 'carrot',
+  soğan: 'onion',
+  sogan: 'onion',
+  sarımsak: 'garlic',
+  salatalık: 'cucumber',
+  salatalik: 'cucumber',
+  marul: 'lettuce',
+  ıspanak: 'spinach',
+  ispanak: 'spinach',
+  brokoli: 'broccoli',
+  mantar: 'mushroom',
+  yaban: 'blueberry', // yaban mersini
+  avokado: 'avocado',
+  mısır: 'corn',
+  misir: 'corn',
+  cips: 'chips',
+  bisküvi: 'biscuit',
+  biskuvi: 'biscuit',
+  dondurma: 'ice cream',
+  kefir: 'kefir',
+  ayran: 'ayran',
+  tereyağı: 'butter',
+  tereyagi: 'butter',
+  margarin: 'margarine',
+  protein: 'protein',
+  granola: 'granola',
+  müsli: 'muesli',
+  musli: 'muesli',
+  şeker: 'sugar',
+  seker: 'sugar',
+  tuz: 'salt',
+  un: 'flour',
+  yağ: 'oil',
+  yag: 'oil',
+}
+
+function expandQuery(q) {
+  const lower = q.toLowerCase().trim()
+  const words = lower.split(/\s+/)
+  const translated = words.map((w) => TR_EN_FOOD[w]).filter(Boolean)
+  if (translated.length === 0) return q
+  // Hem orijinal Türkçe sorguyu hem de İngilizce karşılığını birleştir
+  return `${q} ${translated.join(' ')}`
+}
+
 // Open Food Facts'e server-side proxy.
 // CORS sorununu çözer + OFF'un Cloudflare WAF'ında bot olarak işaretlenmemek için
 // browser benzeri header'lar gönderiyoruz, ayrıca v2 503 verirse search-a-licious'a düşüyoruz.
@@ -54,13 +145,14 @@ app.get('/api/off-search', async (req, res) => {
     return res.status(400).json({ error: 'q parametresi gerekli' })
   }
 
+  const expanded = expandQuery(query)
   const errors = []
   for (const [name, fn] of [
     ['v2', tryV2],
     ['search-a-licious', trySearchALicious],
   ]) {
     try {
-      const data = await fn(query)
+      const data = await fn(expanded)
       res.set('Cache-Control', 'public, max-age=300')
       return res.json(data)
     } catch (err) {
