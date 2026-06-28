@@ -18,28 +18,35 @@ export default function FoodLog({ foods, calories, proteinGoal, caloriesGoal, pr
 
   useEffect(() => {
     // Listede zaten yeterli yerel sonuç varsa online aramaya gerek yok
-    if (query.trim().length < 3 || localMatches.length >= 3 || onlineUnavailable) {
+    if (query.trim().length < 3 || localMatches.length >= 3) {
       setOnlineResults([])
+      setOnlineLoading(false)
       return
     }
+    // Yeni sorguda başarısızlık flag'ini sıfırla — kullanıcı tekrar denemek istiyor
+    setOnlineUnavailable(false)
     const controller = new AbortController()
     setOnlineLoading(true)
     const timer = setTimeout(() => {
       searchOpenFoodFacts(query.trim(), controller.signal)
-        .then((results) => setOnlineResults(results))
-        .catch((err) => {
-          if (err.name !== 'AbortError') {
-            console.error('Open Food Facts arama hatası:', err)
-            setOnlineUnavailable(true)
-          }
+        .then((results) => {
+          if (!controller.signal.aborted) setOnlineResults(results)
         })
-        .finally(() => setOnlineLoading(false))
+        .catch((err) => {
+          // Abort = kullanıcı yazmaya devam etti, sessizce yut
+          if (err.name === 'AbortError' || controller.signal.aborted) return
+          console.error('Open Food Facts arama hatası:', err)
+          setOnlineUnavailable(true)
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setOnlineLoading(false)
+        })
     }, 400)
     return () => {
       clearTimeout(timer)
       controller.abort()
     }
-  }, [query, localMatches.length, onlineUnavailable])
+  }, [query, localMatches.length])
 
   function selectFood(food) {
     setSelected(food)

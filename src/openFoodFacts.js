@@ -10,6 +10,8 @@ export async function searchOpenFoodFacts(query, signal) {
   try {
     res = await fetch(`${PROXY_ENDPOINT}?${params}`, { signal })
   } catch (err) {
+    // AbortError'u olduğu gibi yukarıya gönder ki çağıran taraf doğru ayırt edebilsin
+    if (err.name === 'AbortError') throw err
     throw new Error(`Ağ isteği başarısız: ${err.message}`)
   }
 

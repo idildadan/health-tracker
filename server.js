@@ -108,6 +108,12 @@ const BROWSER_HEADERS = {
   Referer: 'https://world.openfoodfacts.org/',
 }
 
+function fetchWithTimeout(url, options, ms = 5000) {
+  const controller = new AbortController()
+  const t = setTimeout(() => controller.abort(), ms)
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(t))
+}
+
 async function tryV2(query) {
   const params = new URLSearchParams({
     search_terms: query,
@@ -115,9 +121,11 @@ async function tryV2(query) {
     lc: 'tr',
     fields: 'product_name,product_name_tr,brands,nutriments',
   })
-  const res = await fetch(`https://world.openfoodfacts.org/api/v2/search?${params}`, {
-    headers: BROWSER_HEADERS,
-  })
+  const res = await fetchWithTimeout(
+    `https://world.openfoodfacts.org/api/v2/search?${params}`,
+    { headers: BROWSER_HEADERS },
+    5000,
+  )
   if (!res.ok) throw new Error(`v2 ${res.status}`)
   return await res.json()
 }
@@ -130,9 +138,11 @@ async function trySearchALicious(query) {
     langs: 'tr,en',
     fields: 'product_name,product_name_tr,brands,nutriments',
   })
-  const res = await fetch(`https://search.openfoodfacts.org/search?${params}`, {
-    headers: BROWSER_HEADERS,
-  })
+  const res = await fetchWithTimeout(
+    `https://search.openfoodfacts.org/search?${params}`,
+    { headers: BROWSER_HEADERS },
+    8000,
+  )
   if (!res.ok) throw new Error(`search-a-licious ${res.status}`)
   const data = await res.json()
   // search-a-licious response formatını v2 formatına dönüştür (hits → products)
