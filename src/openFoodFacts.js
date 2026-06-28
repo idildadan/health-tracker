@@ -1,22 +1,20 @@
-const ENDPOINT = 'https://world.openfoodfacts.org/api/v2/search'
+// Tarayıcıdan Open Food Facts'e doğrudan istek atmıyoruz; kendi backend proxy'mize
+// (/api/off-search) atıyoruz. Bu sayede CORS sorunu yaşamıyoruz ve OFF'un anonim
+// kullanıcılara verdiği 503 engelinden de muafız.
+const PROXY_ENDPOINT = '/api/off-search'
 
 export async function searchOpenFoodFacts(query, signal) {
-  const params = new URLSearchParams({
-    search_terms: query,
-    page_size: '10',
-    lc: 'tr', // ürün adlarının Türkçe çevirisi varsa onu döndür
-    fields: 'product_name,product_name_tr,brands,nutriments',
-  })
+  const params = new URLSearchParams({ q: query })
 
   let res
   try {
-    res = await fetch(`${ENDPOINT}?${params.toString()}`, { signal })
+    res = await fetch(`${PROXY_ENDPOINT}?${params}`, { signal })
   } catch (err) {
     throw new Error(`Ağ isteği başarısız: ${err.message}`)
   }
 
   if (!res.ok) {
-    throw new Error(`Open Food Facts ${res.status} döndürdü`)
+    throw new Error(`Arama başarısız (${res.status})`)
   }
 
   const data = await res.json()
