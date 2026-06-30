@@ -1,10 +1,16 @@
 import express from 'express'
+import Anthropic from '@anthropic-ai/sdk'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
+app.use(express.json({ limit: '64kb' }))
 const PORT = process.env.PORT || 4173
+
+const anthropic = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null
 
 // Türkçe yiyecek terimlerinin İngilizce karşılıkları. OFF'un ürün veritabanı çoğunlukla
 // İngilizce isim taşıdığı için "yumurta" gibi tek başına Türkçe sorgular eşleşmiyor.
@@ -171,6 +177,73 @@ app.get('/api/off-search', async (req, res) => {
     }
   }
   res.status(502).json({ error: `Tüm endpointler başarısız: ${errors.join(' | ')}` })
+})
+
+// AI ile öğün ayrıştırma — kullanıcının doğal dil öğün açıklamasını alır,
+// Claude Haiku'ya tool use ile yollar, structured JSON döner.
+const MEAL_TOOL = {
+  name: 'submit_meal_breakdown',
+  description: 'Kullanıcının öğün açıklamasını yiyecek kalemlerine ayır ve her biri için kalori/protein tahmini ver',
+  input_schema: {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Yiyeceğin Türkçe ismi (örn. "Yumurta (haşlanmış)", "Tam buğday ekmeği")' },
+            grams: { type: 'number', description: 'Tahmini ağırlık gram cinsinden; bilinmiyorsa porsiyon ortalamasını kullan' },
+            calories: { type: 'number', description: 'Toplam kalori (kcal), porsiyon için' },
+            protein: { type: 'number', description: 'Toplam protein gramı, porsiyon için' },
+          },
+          required: ['name', 'calories', 'protein'],
+        },
+      },
+      notes: {
+        type: 'string',
+        description: 'Varsa kısa bir varsayım notu (örn. "Yumurta haşlanmış kabul edildi"). Boş bırakılabilir.',
+      },
+    },
+    required: ['items'],
+  },
+}
+
+app.post('/api/ai-meal', async (req, res) => {
+  if (!anthropic) {
+    return res.status(503).json({ error: 'ANTHROPIC_API_KEY tanımlı değil' })
+  }
+  const text = String(req.body?.text || '').trim()
+  if (!text) {
+    return res.status(400).json({ error: 'text alanı gerekli' })
+  }
+  if (text.length > 1000) {
+    return res.status(400).json({ error: 'text çok uzun (max 1000 karakter)' })
+  }
+
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      tools: [MEAL_TOOL],
+      tool_choice: { type: 'tool', name: 'submit_meal_breakdown' },
+      messages: [
+        {
+          role: 'user',
+          content: `Aşağıdaki öğün açıklamasını yiyecek kalemlerine ayır ve her biri için makul kalori (kcal) ve protein (gram) tahmini ver. Türk mutfağı ve yaygın porsiyon ölçülerini bil. Belirtilen adet/porsiyon yoksa makul bir varsayım yap. Sadece tool çağrısıyla yanıt ver.\n\nÖğün: ${text}`,
+        },
+      ],
+    })
+
+    const toolUse = message.content.find((c) => c.type === 'tool_use')
+    if (!toolUse) {
+      return res.status(502).json({ error: 'Model tool çağrısı yapmadı' })
+    }
+    res.json(toolUse.input)
+  } catch (err) {
+    console.error('AI öğün hatası:', err)
+    res.status(502).json({ error: `AI çağrısı başarısız: ${err.message}` })
+  }
 })
 
 // Static dist klasörünü servis et + SPA fallback

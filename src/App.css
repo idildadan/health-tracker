@@ -343,6 +343,99 @@ body {
   color: var(--muted);
 }
 
+/* AI öğün girişi */
+.ai-toggle {
+  width: 100%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.ai-panel {
+  background: var(--bg);
+  border: 1px solid #6366f155;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.ai-textarea {
+  width: 100%;
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+.ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ai-run {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-run:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-error {
+  color: #f87171;
+  font-size: 12px;
+}
+
+.ai-preview {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #2a2e3a;
+}
+
+.ai-notes {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+.ai-totals {
+  font-size: 13px;
+  color: var(--text);
+  margin: 8px 0;
+  text-align: right;
+}
+
+.ai-add-all {
+  width: 100%;
+  background: var(--accent);
+  color: #0f1117;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .food-search {
   width: 100%;
   background: var(--bg);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { FOODS, calcMacros } from '../foodDatabase'
 import { searchOpenFoodFacts } from '../openFoodFacts'
+import { parseMealWithAI } from '../aiMeal'
 
 export default function FoodLog({ foods, calories, proteinGoal, caloriesGoal, protein, onAdd, onRemove }) {
   const [query, setQuery] = useState('')
@@ -13,6 +14,12 @@ export default function FoodLog({ foods, calories, proteinGoal, caloriesGoal, pr
   const [onlineResults, setOnlineResults] = useState([])
   const [onlineLoading, setOnlineLoading] = useState(false)
   const [onlineUnavailable, setOnlineUnavailable] = useState(false)
+
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiText, setAiText] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState(null)
+  const [aiPreview, setAiPreview] = useState(null) // { items: [...], notes }
 
   const localMatches = FOODS.filter((f) => f.name.toLowerCase().includes(query.toLowerCase()))
 
@@ -80,6 +87,37 @@ export default function FoodLog({ foods, calories, proteinGoal, caloriesGoal, pr
     setManualOpen(false)
   }
 
+  async function runAiParse() {
+    if (!aiText.trim()) return
+    setAiLoading(true)
+    setAiError(null)
+    setAiPreview(null)
+    try {
+      const result = await parseMealWithAI(aiText.trim())
+      setAiPreview(result)
+    } catch (err) {
+      setAiError(err.message)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  function addAllAiItems() {
+    if (!aiPreview?.items) return
+    aiPreview.items.forEach((it, i) => {
+      onAdd({
+        id: `ai-${Date.now()}-${i}`,
+        name: it.name,
+        grams: it.grams || null,
+        calories: Math.round(it.calories || 0),
+        protein: Math.round((it.protein || 0) * 10) / 10,
+      })
+    })
+    setAiText('')
+    setAiPreview(null)
+    setAiOpen(false)
+  }
+
   return (
     <div className="card foodlog-card">
       <div className="card-header">
@@ -95,6 +133,56 @@ export default function FoodLog({ foods, calories, proteinGoal, caloriesGoal, pr
           🥩 {protein} <span className="card-unit">/ {proteinGoal} g</span>
         </div>
       </div>
+
+      <button className="ai-toggle" onClick={() => setAiOpen((v) => !v)}>
+        🤖 {aiOpen ? 'AI öğün girişini kapat' : 'AI ile öğün ekle'}
+      </button>
+
+      {aiOpen && (
+        <div className="ai-panel">
+          <textarea
+            className="ai-textarea"
+            rows={3}
+            placeholder="Örn: kahvaltıda 2 yumurta, 1 dilim ekşi mayalı ekmek, beyaz peynir, 5 zeytin, bir bardak çay"
+            value={aiText}
+            onChange={(e) => setAiText(e.target.value)}
+          />
+          <div className="ai-actions">
+            <button className="ai-run" onClick={runAiParse} disabled={aiLoading || !aiText.trim()}>
+              {aiLoading ? 'Hesaplanıyor...' : 'Hesapla'}
+            </button>
+            {aiError && <span className="ai-error">{aiError}</span>}
+          </div>
+
+          {aiPreview && (
+            <div className="ai-preview">
+              {aiPreview.notes && <div className="ai-notes">💭 {aiPreview.notes}</div>}
+              <ul className="food-list">
+                {aiPreview.items.map((it, i) => (
+                  <li key={i}>
+                    <span className="food-list-name">
+                      {it.name} {it.grams ? `(${it.grams}g)` : ''}
+                    </span>
+                    <span className="food-list-macros">
+                      {Math.round(it.calories || 0)} kcal · {Math.round((it.protein || 0) * 10) / 10}g
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="ai-totals">
+                Toplam:{' '}
+                <strong>
+                  {Math.round(aiPreview.items.reduce((s, it) => s + (it.calories || 0), 0))} kcal ·{' '}
+                  {Math.round(aiPreview.items.reduce((s, it) => s + (it.protein || 0), 0) * 10) / 10}g protein
+                </strong>
+              </div>
+              <button className="ai-add-all" onClick={addAllAiItems}>
+                ✓ Hepsini güne ekle
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <input
         className="food-search"
