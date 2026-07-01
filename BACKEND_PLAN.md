@@ -30,10 +30,28 @@ etsy portalı kendi repo'sunda). Hepsi `backend`'e API çağrısı yapar.
 - **DB:** PostgreSQL (Railway tek tık, `DATABASE_URL` env), **app başına Postgres schema**
 - **DB katmanı:** Drizzle ORM (tipli şema + migration'lar)
 - **Auth:** Google OAuth + e-posta allowlist, **bearer token** (cross-origin için)
+- **LLM:** ortak `llm` servisi — Claude (Anthropic) + OpenAI anahtarları tek yerde
 - **Route namespace:** `/api/health/*`, `/api/etsy/*`, `/api/flm/*`, ortak `/api/auth/*`
 - **Frontend:** her app kendi repo'sunda; health-tracker React PWA localStorage yerine
   `backend` API'sini çağırır (localStorage offline cache olarak kalabilir)
 - **Hosting:** Railway (yeni `backend` servisi + Postgres)
+
+### Ortak servis katmanı (tüm app'lerin paylaştığı çekirdek)
+Bu katman backend'de bir kez yazılır, tüm app modülleri (health/etsy/flm/gelecek) çağırır:
+
+1. **Kimlik (`auth`)** — Google OAuth + bearer token + `requireAuth` middleware
+2. **Veritabanı (`db`)** — tek Drizzle/pg bağlantısı; her app kendi schema'sında
+3. **LLM (`llm`)** — **Claude + OpenAI istemcileri ve API anahtarları tek yerde.**
+   - Anahtarlar yalnızca backend env'inde: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+   - Frontend'ler ve ayrı repolar anahtarı **hiç görmez** — hepsi backend'e istek atar
+   - Ortak yardımcı: `llm.claude({...})`, `llm.openai({...})` — model/parametre seçimi
+     çağrı yerinde yapılır (örn. health'te Haiku, etsy'de daha büyük model)
+   - Tek noktada: kota/limit, hata yönetimi, log, ileride maliyet takibi
+4. **Ortak yardımcılar** — CORS, hata biçimi, doğrulama vb.
+
+**Yeni proje eklemek** (örn. ileride başka bir app): yeni bir Postgres schema + yeni bir
+`modules/<app>/` route klasörü aç, ortak `auth`/`db`/`llm` servislerini import et. Anahtar
+kopyalamak, ayrı auth kurmak, ayrı LLM istemcisi yazmak gerekmez.
 
 ---
 
@@ -73,8 +91,12 @@ GOOGLE_REDIRECT_URI=https://<backend-domain>/api/auth/google/callback
 ALLOWED_EMAILS=idildadan@gmail.com
 ALLOWED_ORIGINS=https://<health-frontend>,https://<etsy-frontend>  # CORS
 JWT_SECRET=...              # rastgele uzun string
-ANTHROPIC_API_KEY=...       # AI öğün ayrıştırma (health)
+ANTHROPIC_API_KEY=...       # ORTAK — tüm app'lerin Claude çağrıları
+OPENAI_API_KEY=...          # ORTAK — tüm app'lerin OpenAI çağrıları
 ```
+
+**Not:** LLM anahtarları artık her repoda ayrı ayrı durmaz; yalnızca bu backend'de
+tanımlıdır. Health, Etsy, FLM ve gelecek app'ler ortak `llm` servisi üzerinden kullanır.
 
 ---
 
@@ -227,6 +249,10 @@ backend/                    # YENİ repo — ortak servis
   auth/
     google.js               # OAuth akışı (ortak)
     middleware.js           # requireAuth — Bearer token doğrulama
+  lib/                      # ORTAK servisler (tüm modüller import eder)
+    llm.js                  # Claude + OpenAI istemcileri; anahtarlar tek yerde
+    cors.js                 # CORS origin allowlist
+    errors.js               # ortak hata biçimi
   modules/
     health/
       day.js
@@ -234,10 +260,10 @@ backend/                    # YENİ repo — ortak servis
       goals.js
       presets.js
       off.js                # OFF proxy (health-tracker'dan taşınır)
-      ai.js                 # ai-meal (health-tracker'dan taşınır)
+      ai.js                 # ai-meal — lib/llm.js'i kullanır
       import.js
-    etsy/                   # (ileride)
-    flm/                    # (ileride)
+    etsy/                   # (ileride) lib/llm.js'i kullanır
+    flm/                    # (ileride) lib/llm.js'i kullanır
   drizzle/                  # migration dosyaları
   BACKEND_PLAN.md           # bu doküman (buraya taşınır)
 
@@ -314,6 +340,11 @@ Az önce eklediğimiz **export/import** özelliği migrasyon köprüsü:
 - **Veri ayrımı: Postgres schema'lar.** `auth` (ortak), `health`, `etsy`, `flm` (ayrı).
 - **Google OAuth: FLM client'ı tüm app'lerde ortak,** ortak backend'de tek akış.
   Erişim `ALLOWED_EMAILS` allowlist (şimdilik tek kişi).
+- **LLM anahtarları merkezî.** Claude + OpenAI anahtarları yalnızca backend env'inde
+  (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`); ortak `lib/llm.js` üzerinden tüm app'ler
+  kullanır. Repolarda dağınık anahtar yok; tek noktada limit/hata/log/maliyet takibi.
+- **Genişletilebilirlik:** yeni proje = yeni Postgres schema + yeni `modules/<app>/`;
+  ortak `auth`/`db`/`llm` servisleri import edilir, tekrar kurulmaz.
 - **Auth taşıma: Bearer token** (cross-origin olduğu için cookie değil). Frontend
   token'ı saklar, `Authorization` header'ıyla gönderir. CORS origin allowlist ile korunur.
 - **Route namespace:** `/api/health/*`, `/api/etsy/*`, `/api/flm/*`, ortak `/api/auth/*`.
