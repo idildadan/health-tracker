@@ -4,8 +4,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // GitHub Pages proje sayfası: https://idildadan.github.io/health-tracker/
-  base: '/health-tracker/',
+  // Railway'de kendi domain'inin kökünde sunuluyor -> base '/'.
+  base: '/',
   preview: {
     allowedHosts: true,
   },
@@ -24,8 +24,8 @@ export default defineConfig({
         theme_color: '#0f1117',
         background_color: '#0f1117',
         display: 'standalone',
-        start_url: '/health-tracker/',
-        scope: '/health-tracker/',
+        start_url: '/',
+        scope: '/',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
