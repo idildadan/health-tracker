@@ -115,6 +115,7 @@ export function useDailyData() {
   const [date, setDate] = useState(todayKey())
   const [allData, setAllData] = useState(loadCache)
   const [goals, setGoals] = useState(loadGoalsCache)
+  const [presets, setPresets] = useState([])
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState(null)
 
@@ -156,6 +157,9 @@ export function useDailyData() {
           for (const d of h.days) next[d.date] = { ...defaultDay, ...next[d.date], ...mapDay(d) }
           return next
         })
+        const p = await api('/api/health/presets')
+        if (cancelled) return
+        setPresets(p.presets || [])
       } catch (err) {
         if (!cancelled && err.status !== 401) setError(err.message)
       } finally {
@@ -275,6 +279,52 @@ export function useDailyData() {
     )
   }
 
+  // --- Hazır öğünler (preset) ---
+  // Seçili günün yemeklerini isimli bir kısayol olarak kaydet.
+  async function savePreset(name) {
+    const foods = allData[date]?.foods || []
+    if (!name || foods.length === 0) return
+    const items = foods.map((f) => ({
+      name: f.name,
+      grams: f.grams ?? null,
+      calories: f.calories,
+      protein: f.protein,
+    }))
+    try {
+      const r = await api('/api/health/presets', { method: 'POST', body: { name, items } })
+      setPresets((prev) => [...prev, r.preset])
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function deletePreset(id) {
+    setPresets((prev) => prev.filter((p) => p.id !== id))
+    try {
+      await api(`/api/health/presets/${id}`, { method: 'DELETE' })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // Kısayoldaki kalemleri seçili güne ekle (tek tık).
+  async function applyPreset(id) {
+    try {
+      const r = await api(`/api/health/day/${date}/apply-preset/${id}`, { method: 'POST' })
+      setAllData((prev) => {
+        const cur = { ...defaultDay, ...prev[date], foods: prev[date]?.foods || [] }
+        const foods = cur.foods.concat(r.foods)
+        return {
+          ...prev,
+          [date]: { ...cur, foods, calories: r.totals.caloriesTotal, protein: r.totals.proteinTotal },
+        }
+      })
+    } catch (err) {
+      setError(err.message)
+      reloadDay()
+    }
+  }
+
   function history(days = 7) {
     const result = []
     for (let i = days - 1; i >= 0; i--) {
@@ -324,11 +374,15 @@ export function useDailyData() {
     setDate,
     day,
     goals,
+    presets,
     update,
     increment,
     addFood,
     removeFood,
     updateGoal,
+    savePreset,
+    deletePreset,
+    applyPreset,
     history,
     previousWeight,
     streak,

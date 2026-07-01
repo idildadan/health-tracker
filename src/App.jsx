@@ -7,6 +7,7 @@ import StreakBadge from './components/StreakBadge'
 import GoalInput from './components/GoalInput'
 import FoodLog from './components/FoodLog'
 import HistoryChart from './components/HistoryChart'
+import MealPresets from './components/MealPresets'
 import LoginScreen from './components/LoginScreen'
 import './App.css'
 
@@ -39,11 +40,15 @@ function App() {
     setDate,
     day,
     goals,
+    presets,
     increment,
     update,
     addFood,
     removeFood,
     updateGoal,
+    savePreset,
+    deletePreset,
+    applyPreset,
     history,
     previousWeight,
     streak,
@@ -189,6 +194,14 @@ function App() {
         proteinGoal={goals.protein}
         onAdd={addFood}
         onRemove={removeFood}
+      />
+
+      <MealPresets
+        presets={presets}
+        currentFoodCount={day.foods.length}
+        onApply={applyPreset}
+        onDelete={deletePreset}
+        onSave={savePreset}
       />
 
       <section className="history-section">
