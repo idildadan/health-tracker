@@ -39,9 +39,41 @@ function App() {
     history,
     previousWeight,
     streak,
+    exportData,
+    importData,
   } = useDailyData()
   const [showGoals, setShowGoals] = useState(false)
   const last7 = history(7)
+
+  function handleExport() {
+    const payload = exportData()
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `saglik-yedek-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleImportClick() {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'application/json'
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      try {
+        const text = await file.text()
+        const payload = JSON.parse(text)
+        importData(payload)
+        alert('✓ Veriler başarıyla yüklendi')
+      } catch (err) {
+        alert(`Yükleme başarısız: ${err.message}`)
+      }
+    }
+    input.click()
+  }
 
   return (
     <div className="app">
@@ -89,6 +121,10 @@ function App() {
             ⚖️ Hedef kilo (kg)
             <GoalInput step="0.1" value={goals.weight} onChange={(v) => updateGoal('weight', v)} />
           </label>
+          <div className="backup-row">
+            <button onClick={handleExport}>💾 Yedek indir</button>
+            <button onClick={handleImportClick}>📥 Yedek yükle</button>
+          </div>
         </section>
       )}
 

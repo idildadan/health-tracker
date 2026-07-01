@@ -175,6 +175,25 @@ export function useDailyData() {
     return allData[keys[keys.length - 1]].weight
   }
 
+  function exportData() {
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: allData,
+      goals,
+    }
+  }
+
+  function importData(payload) {
+    if (!payload || typeof payload !== 'object') throw new Error('Geçersiz veri')
+    if (payload.data && typeof payload.data === 'object') {
+      setAllData((prev) => ({ ...prev, ...payload.data }))
+    }
+    if (payload.goals && typeof payload.goals === 'object') {
+      setGoals((prev) => ({ ...prev, ...payload.goals }))
+    }
+  }
+
   const streak = computeStreak(allData)
 
   return {
@@ -190,5 +209,7 @@ export function useDailyData() {
     history,
     previousWeight,
     streak,
+    exportData,
+    importData,
   }
 }
