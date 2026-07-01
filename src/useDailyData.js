@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react'
+import { api, getToken, login as apiLogin, logout as apiLogout } from './api/client'
 
 const todayKey = () => new Date().toISOString().slice(0, 10)
 
-// 1 fincan Türk kahvesi ≈ yarım doz kafein, 1 fincan filtre kahve ≈ 1.25 doz kafein.
-// (Filtre kahvenin kafein içeriği Türk kahvesine göre yaklaşık 2.5x kabul edildi; gerekirse buradan ayarla.)
+// 1 fincan Türk kahvesi ≈ yarım doz kafein, 1 fincan filtre kahve ≈ 1.25 doz.
 export const CAFFEINE_DOSE = {
   turkishCoffee: 0.5,
   filterCoffee: 1.25,
 }
 
 export function caffeineFor(day) {
-  return Math.round(
-    ((day.turkishCoffee || 0) * CAFFEINE_DOSE.turkishCoffee +
-      (day.filterCoffee || 0) * CAFFEINE_DOSE.filterCoffee) *
-      100,
-  ) / 100
+  return (
+    Math.round(
+      ((day.turkishCoffee || 0) * CAFFEINE_DOSE.turkishCoffee +
+        (day.filterCoffee || 0) * CAFFEINE_DOSE.filterCoffee) *
+        100,
+    ) / 100
+  )
 }
 
 const defaultGoals = {
@@ -23,7 +25,7 @@ const defaultGoals = {
   caffeine: 3, // doz
   calories: 2000,
   protein: 100, // g
-  sleep: 8, // hours
+  sleep: 8, // saat
   weight: 70, // kg, hedef kilo
 }
 
@@ -39,9 +41,28 @@ const defaultDay = {
   foods: [],
 }
 
-// Bir günün "tamamlanmış" sayılması için en az bu kadar kategoride kayıt olmalı.
-const COMPLETION_THRESHOLD = 4
+// Backend day satırını (caloriesTotal/proteinTotal) frontend şekline çevir.
+function mapDay(d) {
+  return {
+    steps: d.steps || 0,
+    water: d.water || 0,
+    turkishCoffee: d.turkishCoffee || 0,
+    filterCoffee: d.filterCoffee || 0,
+    sleep: d.sleep || 0,
+    weight: d.weight || 0,
+    calories: d.caloriesTotal || 0,
+    protein: d.proteinTotal || 0,
+  }
+}
 
+function pickGoals(g) {
+  const out = {}
+  for (const k of Object.keys(defaultGoals)) if (g?.[k] != null) out[k] = g[k]
+  return out
+}
+
+// --- Streak (localStorage/API'den hidrate edilen allData üzerinden, senkron) ---
+const COMPLETION_THRESHOLD = 4
 function isDayComplete(day) {
   const checks = [
     day.steps > 0,
@@ -53,7 +74,6 @@ function isDayComplete(day) {
   ]
   return checks.filter(Boolean).length >= COMPLETION_THRESHOLD
 }
-
 function computeStreak(allData) {
   let streak = 0
   let first = true
@@ -61,8 +81,7 @@ function computeStreak(allData) {
   while (true) {
     const key = cursor.toISOString().slice(0, 10)
     const day = { ...defaultDay, ...allData[key] }
-    const complete = isDayComplete(day)
-    if (complete) {
+    if (isDayComplete(day)) {
       streak++
     } else if (!(first && key === todayKey())) {
       break
@@ -73,15 +92,15 @@ function computeStreak(allData) {
   return streak
 }
 
-function loadAllData() {
+// --- localStorage: offline-first cache (API kaynağın kendisi, bu sadece hızlı ilk boyama) ---
+function loadCache() {
   try {
     return JSON.parse(localStorage.getItem('healthtrack_data') || '{}')
   } catch {
     return {}
   }
 }
-
-function loadGoals() {
+function loadGoalsCache() {
   try {
     const saved = JSON.parse(localStorage.getItem('healthtrack_goals') || 'null')
     return saved ? { ...defaultGoals, ...saved } : defaultGoals
@@ -91,68 +110,169 @@ function loadGoals() {
 }
 
 export function useDailyData() {
+  const [authed, setAuthed] = useState(Boolean(getToken()))
+  const [user, setUser] = useState(null)
   const [date, setDate] = useState(todayKey())
-  const [allData, setAllData] = useState(loadAllData)
-  const [goals, setGoals] = useState(loadGoals)
+  const [allData, setAllData] = useState(loadCache)
+  const [goals, setGoals] = useState(loadGoalsCache)
+  const [syncing, setSyncing] = useState(false)
+  const [error, setError] = useState(null)
 
+  // localStorage cache'i güncel tut
   useEffect(() => {
     localStorage.setItem('healthtrack_data', JSON.stringify(allData))
   }, [allData])
-
   useEffect(() => {
     localStorage.setItem('healthtrack_goals', JSON.stringify(goals))
   }, [goals])
 
+  // 401 -> oturumu düşür
+  useEffect(() => {
+    const onUnauth = () => {
+      setAuthed(false)
+      setUser(null)
+    }
+    window.addEventListener('ht-unauthorized', onUnauth)
+    return () => window.removeEventListener('ht-unauthorized', onUnauth)
+  }, [])
+
+  // Giriş sonrası: kullanıcı + hedefler + geçmiş penceresi (takvim/streak/grafik için)
+  useEffect(() => {
+    if (!authed) return
+    let cancelled = false
+    setSyncing(true)
+    ;(async () => {
+      try {
+        const me = await api('/api/me')
+        if (cancelled) return
+        setUser(me.user)
+        const g = await api('/api/health/goals')
+        if (cancelled) return
+        setGoals((prev) => ({ ...prev, ...pickGoals(g.goals) }))
+        const h = await api('/api/health/history?days=120')
+        if (cancelled) return
+        setAllData((prev) => {
+          const next = { ...prev }
+          for (const d of h.days) next[d.date] = { ...defaultDay, ...next[d.date], ...mapDay(d) }
+          return next
+        })
+      } catch (err) {
+        if (!cancelled && err.status !== 401) setError(err.message)
+      } finally {
+        if (!cancelled) setSyncing(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [authed])
+
+  // Seçili günü (yemek detayıyla) yükle
+  useEffect(() => {
+    if (!authed) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await api(`/api/health/day/${date}`)
+        if (cancelled) return
+        setAllData((prev) => ({
+          ...prev,
+          [date]: { ...defaultDay, ...mapDay(r.day), foods: r.foods || [] },
+        }))
+      } catch (err) {
+        if (!cancelled && err.status !== 401) setError(err.message)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [authed, date])
+
   const rawDay = { ...defaultDay, ...allData[date], foods: allData[date]?.foods || [] }
   const day = { ...rawDay, caffeine: caffeineFor(rawDay) }
 
+  async function reloadDay(d = date) {
+    try {
+      const r = await api(`/api/health/day/${d}`)
+      setAllData((prev) => ({
+        ...prev,
+        [d]: { ...defaultDay, ...mapDay(r.day), foods: r.foods || [] },
+      }))
+    } catch {
+      /* sessiz: bir sonraki işlemde tekrar denenir */
+    }
+  }
+
+  // steps/water/coffee/sleep/weight — optimistic + PATCH; hata olursa günü yeniden çek
   function update(field, value) {
     setAllData((prev) => ({
       ...prev,
       [date]: { ...defaultDay, ...prev[date], [field]: value },
     }))
+    api(`/api/health/day/${date}`, { method: 'PATCH', body: { [field]: value } }).catch((err) => {
+      setError(err.message)
+      reloadDay()
+    })
   }
 
   function increment(field, amount) {
     const current = (allData[date] || defaultDay)[field] || 0
-    const next = Math.round((current + amount) * 100) / 100
-    update(field, Math.max(0, next))
+    update(field, Math.max(0, Math.round((current + amount) * 100) / 100))
   }
 
-  function addFood(entry) {
+  async function addFood(entry) {
+    const temp = { ...entry, _pending: true }
     setAllData((prev) => {
-      const current = { ...defaultDay, ...prev[date], foods: prev[date]?.foods || [] }
-      const foods = [...current.foods, entry]
-      return {
-        ...prev,
-        [date]: {
-          ...current,
-          foods,
-          calories: Math.round(foods.reduce((s, f) => s + f.calories, 0)),
-          protein: Math.round(foods.reduce((s, f) => s + f.protein, 0) * 10) / 10,
-        },
-      }
+      const cur = { ...defaultDay, ...prev[date], foods: prev[date]?.foods || [] }
+      return { ...prev, [date]: { ...cur, foods: [...cur.foods, temp] } }
     })
+    try {
+      const r = await api(`/api/health/day/${date}/foods`, {
+        method: 'POST',
+        body: {
+          name: entry.name,
+          grams: entry.grams ?? null,
+          calories: entry.calories,
+          protein: entry.protein,
+          source: entry.source,
+        },
+      })
+      setAllData((prev) => {
+        const cur = { ...defaultDay, ...prev[date], foods: prev[date]?.foods || [] }
+        const foods = cur.foods.filter((f) => f !== temp).concat(r.food)
+        return {
+          ...prev,
+          [date]: { ...cur, foods, calories: r.totals.caloriesTotal, protein: r.totals.proteinTotal },
+        }
+      })
+    } catch (err) {
+      setError(err.message)
+      reloadDay()
+    }
   }
 
-  function removeFood(id) {
+  async function removeFood(id) {
     setAllData((prev) => {
-      const current = { ...defaultDay, ...prev[date], foods: prev[date]?.foods || [] }
-      const foods = current.foods.filter((f) => f.id !== id)
-      return {
-        ...prev,
-        [date]: {
-          ...current,
-          foods,
-          calories: Math.round(foods.reduce((s, f) => s + f.calories, 0)),
-          protein: Math.round(foods.reduce((s, f) => s + f.protein, 0) * 10) / 10,
-        },
-      }
+      const cur = { ...defaultDay, ...prev[date], foods: prev[date]?.foods || [] }
+      return { ...prev, [date]: { ...cur, foods: cur.foods.filter((f) => f.id !== id) } }
     })
+    try {
+      const r = await api(`/api/health/foods/${id}`, { method: 'DELETE' })
+      setAllData((prev) => ({
+        ...prev,
+        [date]: { ...prev[date], calories: r.totals.caloriesTotal, protein: r.totals.proteinTotal },
+      }))
+    } catch (err) {
+      setError(err.message)
+      reloadDay()
+    }
   }
 
   function updateGoal(field, value) {
     setGoals((prev) => ({ ...prev, [field]: value }))
+    api('/api/health/goals', { method: 'PATCH', body: { [field]: value } }).catch((err) =>
+      setError(err.message),
+    )
   }
 
   function history(days = 7) {
@@ -176,14 +296,10 @@ export function useDailyData() {
   }
 
   function exportData() {
-    return {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      data: allData,
-      goals,
-    }
+    return { version: 1, exportedAt: new Date().toISOString(), data: allData, goals }
   }
 
+  // İçe aktarma şimdilik yerel cache'e yazar (backend /api/health/import Aşama 6'da bağlanacak).
   function importData(payload) {
     if (!payload || typeof payload !== 'object') throw new Error('Geçersiz veri')
     if (payload.data && typeof payload.data === 'object') {
@@ -197,6 +313,13 @@ export function useDailyData() {
   const streak = computeStreak(allData)
 
   return {
+    authed,
+    user,
+    syncing,
+    error,
+    clearError: () => setError(null),
+    login: apiLogin,
+    logout: apiLogout,
     date,
     setDate,
     day,

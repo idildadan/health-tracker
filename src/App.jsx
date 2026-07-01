@@ -7,6 +7,7 @@ import StreakBadge from './components/StreakBadge'
 import GoalInput from './components/GoalInput'
 import FoodLog from './components/FoodLog'
 import HistoryChart from './components/HistoryChart'
+import LoginScreen from './components/LoginScreen'
 import './App.css'
 
 const SIMPLE_TRACKERS = [
@@ -27,6 +28,13 @@ const HISTORY_TRACKERS = [
 
 function App() {
   const {
+    authed,
+    user,
+    syncing,
+    error,
+    clearError,
+    login,
+    logout,
     date,
     setDate,
     day,
@@ -44,6 +52,8 @@ function App() {
   } = useDailyData()
   const [showGoals, setShowGoals] = useState(false)
   const last7 = history(7)
+
+  if (!authed) return <LoginScreen onLogin={login} />
 
   function handleExport() {
     const payload = exportData()
@@ -89,7 +99,20 @@ function App() {
         <button className="goals-toggle" onClick={() => setShowGoals((v) => !v)}>
           🎯 Hedefler
         </button>
+        <div className="account">
+          {syncing && <span className="sync-dot" title="Senkronize ediliyor">⟳</span>}
+          {user && <span className="account-email" title={user.email}>{user.email}</span>}
+          <button className="logout-btn" onClick={logout} title="Çıkış yap">
+            Çıkış
+          </button>
+        </div>
       </header>
+
+      {error && (
+        <div className="error-toast" role="alert" onClick={clearError}>
+          ⚠️ {error} <span className="error-dismiss">✕</span>
+        </div>
+      )}
 
       {showGoals && (
         <section className="goals-panel">

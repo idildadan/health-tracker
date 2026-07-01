@@ -1,15 +1,7 @@
-// Claude (server-side) ile doğal dil öğün ayrıştırma.
-// İstek server'daki /api/ai-meal endpoint'ine gider, API key sadece backend'de tutulur.
+// Claude ile doğal dil öğün ayrıştırma. Ortak backend'in /api/health/ai-meal ucuna gider;
+// API key yalnızca backend'de (lib/llm.js). api() base URL + Bearer token ekler.
+import { api } from './api/client'
+
 export async function parseMealWithAI(text, signal) {
-  const res = await fetch('/api/ai-meal', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-    signal,
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.error || `Hata: HTTP ${res.status}`)
-  }
-  return await res.json()
+  return api('/api/health/ai-meal', { method: 'POST', body: { text }, signal })
 }
