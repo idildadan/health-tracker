@@ -29,9 +29,11 @@ asıl kullanılacak app'i geciktirir. Desenleri tekrar kullanırız, kodu değil
 ## 2. Kimlik / Auth
 
 ### Yaklaşım: "Ortak kimlik, ayrı servis yok"
-- FLM projesinde kurulu Google Cloud OAuth client'ı yeniden kullan.
+- FLM projesinde kurulu Google Cloud OAuth client'ı **tüm app'lerde** yeniden kullan
+  (Etsy, FLM portalı, health-tracker + ileride yapılacaklar). Her app kendi redirect
+  URI'sini ekler, kendi `ALLOWED_EMAILS` allowlist'iyle erişimi kısıtlar.
 - Health-tracker'ın redirect URI'sini o client'ın "Authorized redirect URIs"
-  listesine ekle: `https://health-tracker-production-23fe.up.railway.app/api/auth/google/callback`
+  listesine ekle: `https://<yeni-railway-domain>/api/auth/google/callback`
 - Backend, Google'dan dönen token'ı doğrular, kullanıcının e-postasını okur.
 - **Allowlist:** yalnızca `ALLOWED_EMAILS` env'inde tanımlı e-posta(lar) girebilir
   (şimdilik sadece senin adresin). Başka biri Google ile girse bile reddedilir.
@@ -102,9 +104,17 @@ food_entries                -- güne bağlı yemek kalemleri
   grams         real                    -- null olabilir (manuel/AI kalemleri)
   calories      int   not null
   protein       real  not null
-  source        text  default 'manual'  -- 'local' | 'online' | 'manual' | 'ai'
+  source        text  default 'manual'  -- 'local' | 'online' | 'manual' | 'ai' | 'preset'
   created_at    timestamptz default now()
   INDEX(user_id, date)
+
+meal_presets                -- sık yenen öğünlerin kısayolu (tek tıkla eklemek için)
+  id            uuid PK
+  user_id       uuid FK -> users(id)
+  name          text not null            -- "Standart kahvaltı", "Antrenman sonrası"
+  items         jsonb not null           -- [{name, grams, calories, protein}, ...]
+  created_at    timestamptz default now()
+  INDEX(user_id)
 ```
 
 **Not:** kalori/protein günlük toplamları `food_entries`'ten hesaplanır (tek doğru
@@ -137,6 +147,12 @@ DELETE /api/foods/:id              -> yemek sil
 # Hedefler
 GET   /api/goals                   -> hedefleri getir
 PATCH /api/goals                   -> hedef güncelle
+
+# Öğün kısayolları (preset)
+GET    /api/presets                -> kullanıcının kayıtlı öğün kısayolları
+POST   /api/presets                -> yeni kısayol {name, items[]} (bir günden de üretilebilir)
+DELETE /api/presets/:id            -> kısayol sil
+POST   /api/day/:date/apply-preset/:id  -> kısayoldaki tüm kalemleri o güne ekle
 
 # Zaten var (korunacak)
 GET  /api/off-search?q=            -> Open Food Facts proxy
@@ -187,8 +203,12 @@ health-tracker/
   - Açılışta localStorage'dan hızlı göster, arka planda API'den çek + senkronize et
   - Yazma işlemleri optimistic + API'ye POST/PATCH; hata olursa geri al
 - **Giriş ekranı** (`LoginScreen`): oturum yoksa "Google ile giriş" butonu
-- **Geçmiş görünümü** (`HistoryView`): takvim/liste ile geçmiş günlere bakma —
-  senin asıl istediğin "dün ne yedim" özelliği
+- **Geçmiş görünümü** (`HistoryView`): **takvim** — her günün kalori/protein toplamı
+  hücrede görünür, hücreye tıklayınca o günün detayına (yemek listesi) gidilir.
+  Varsayılan olarak son 1 ay gösterilir (veri silinmez, sadece görünüm sınırlı).
+- **Öğün kısayolları** (`MealPresets`): sık yenen öğünleri kaydet, tek tıkla o güne
+  ekle. Her seferinde yeniden hesaplamaya/aramaya gerek kalmaz. Geçmişteki bir günü
+  de "kısayola dönüştür" ile preset yapabilirsin.
 - Mevcut kartlar/AI/OFF akışı aynı kalır, sadece veri kaynağı değişir
 
 ---
@@ -205,26 +225,39 @@ Az önce eklediğimiz **export/import** özelliği migrasyon köprüsü:
 
 ## 8. Aşamalı Uygulama Sırası
 
+0. **Yeni repo oluştur** — `health-tracker` adında temiz bir full-stack repo;
+   mevcut workshop repo'sundan yeniden kullanılacak kodu (React app, OFF proxy,
+   AI meal, food DB) taşı. Bu `BACKEND_PLAN.md`'yi de yeni repoya kopyala.
 1. **Postgres kurulumu** — Railway'de DB servisi ekle, `DATABASE_URL` bağla
-2. **Drizzle şema + ilk migration** — tabloları oluştur
+2. **Drizzle şema + ilk migration** — tabloları oluştur (meal_presets dahil)
 3. **Google OAuth** — FLM client'ına redirect URI ekle, auth akışı + `requireAuth`
-4. **API endpointleri** — day / foods / goals / history / range
+4. **API endpointleri** — day / foods / goals / history / range / presets
 5. **Mevcut endpointleri taşı** — off-search + ai-meal `routes/`e
 6. **Frontend auth** — login ekranı + 401 yönlendirme
 7. **Frontend veri katmanı** — `useDailyData` API'ye bağla (offline cache)
 8. **Import** — localStorage yedeğini DB'ye aktarma
-9. **Geçmiş görünümü** — takvim/liste ekranı
-10. **Test + deploy** — uçtan uca doğrulama, Railway'e çıkış
+9. **Geçmiş görünümü** — takvim ekranı (günlük kcal/protein + detay)
+10. **Öğün kısayolları** — preset kaydet/uygula UI
+11. **Test + deploy** — uçtan uca doğrulama, Railway'e çıkış
 
 ---
 
-## 9. Açık Sorular / Onaylanacaklar
+## 9. Kararlar (kesinleşti)
 
-- [ ] DB katmanı: **Drizzle** (öneri) mi, ham `pg` mi, Prisma mı?
-- [ ] Google OAuth: FLM client'ını **yeniden kullan** (öneri) mı, health-tracker'a
-      **yeni bir OAuth client** mı açalım?
-- [ ] Geçmiş görünümü: takvim mi, basit tarih listesi mi, ikisi de mi?
-- [ ] Offline davranışı: internet yokken yazmaya izin verip sonra sync mi,
-      yoksa online zorunlu mu? (kişisel kullanım için offline-first öneri)
-- [ ] Bu iş yeni bir repo mu olsun, mevcut health-tracker repo'sunda mı kalsın?
-      (öneri: mevcut repo — app ile backend aynı yerde, tek deploy)
+- **DB katmanı: Drizzle ORM.** Tip güvenliği + migration'ı Prisma ağırlığı olmadan
+  verir, SQL'e yakın kalır. Aynı desen diğer projelerde de kullanılabilir.
+- **Google OAuth: FLM'nin OAuth client'ı tüm app'lerde ortak.** Etsy, FLM portalı,
+  health-tracker ve ileride yapılacak app'ler aynı client'ı kullanır; her app kendi
+  redirect URI'sini ekler ve kendi e-posta allowlist'iyle erişimi kısıtlar.
+  (Not: bu "ortak kimlik sağlayıcı"dır, gerçek SSO değil — her app kendi giriş
+  butonunu gösterir ama Google oturumu hatırladığı için pratikte tek tık. Gerçek
+  SSO ileride gerekirse ayrı bir auth servisi olarak çıkarılır.)
+- **Geçmiş görünümü: takvim.** Her gün kcal/protein toplamı, tıkla → detay.
+  Varsayılan 1 ay görünüm. **Veri silinmez** (depolama bedava, kilo trendi değerli);
+  1 ay yalnızca varsayılan görünüm sınırı.
+- **Öğün kısayolları (preset):** sık yenen öğünleri kaydet, tek tıkla ekle.
+  Geçmişteki bir gün "kısayola dönüştür" ile preset olabilir.
+- **Offline: yazmaya izin ver, sonra sync (düşük öncelik).** Önce online-first
+  çalışan sürümü çıkar, offline sync sonradan eklenebilir.
+- **Repo: YENİ repo (full-stack).** Frontend + backend + DB aynı repoda, tek deploy.
+  Mevcut workshop repo'su referans kalır; yeni repo temiz başlar.
