@@ -81,7 +81,7 @@ goals                       -- kullanıcı başına tek satır
   weight        real  default 70       -- kg (hedef)
   updated_at    timestamptz default now()
 
-days                        -- kullanıcı + tarih başına tek satır
+days                        -- kullanıcı + tarih başına tek satır (KALICI, küçük)
   id            uuid PK
   user_id       uuid FK -> users(id)
   date          date not null          -- YYYY-MM-DD (kullanıcının yerel günü)
@@ -91,9 +91,10 @@ days                        -- kullanıcı + tarih başına tek satır
   filter_coffee int   default 0
   sleep         real  default 0
   weight        real  default 0
+  calories_total int  default 0        -- günlük snapshot; food_entries silinse de kalır
+  protein_total  real default 0        -- günlük snapshot; food_entries silinse de kalır
   updated_at    timestamptz default now()
   UNIQUE(user_id, date)
-  -- calories/protein türetilmiş: food_entries toplamı (tabloda tutulmaz, hesaplanır)
   -- caffeine türetilmiş: turkish_coffee*0.5 + filter_coffee*1.25
 
 food_entries                -- güne bağlı yemek kalemleri
@@ -117,9 +118,19 @@ meal_presets                -- sık yenen öğünlerin kısayolu (tek tıkla ekl
   INDEX(user_id)
 ```
 
-**Not:** kalori/protein günlük toplamları `food_entries`'ten hesaplanır (tek doğru
-kaynak). Kafein `days`'teki kahve sayılarından türetilir. Bu, mevcut frontend
-mantığıyla birebir uyumlu.
+**Kalori/protein toplamı — çift kayıt:** Bir yemek eklendiğinde/silindiğinde o günün
+`food_entries` toplamı hesaplanıp `days.calories_total` / `days.protein_total`'a yazılır.
+Böylece detay kalemler (food_entries) 1 ay sonra silinse bile günlük toplam korunur.
+Aktif günde detay food_entries'ten gelir; eski günlerde snapshot rakamı gösterilir.
+
+**Veri saklama (retention) — DB'yi şişirmemek için:**
+- `days` ve `meal_presets` → **kalıcı** (küçük, günde 1 satır). Kilo trendi, günlük
+  kalori/protein toplamları hep durur, takvimde rakam olarak görünür.
+- `food_entries` (detay kalemler, asıl büyüyen tablo) → **~35 günden eskiler silinir**.
+  Yöntem: her yemek yazımında (lazy prune) `WHERE user_id=? AND date < now-35d` sil.
+  Cron'a gerek yok. Son ~1 ayda gün detayına bakılır; öncesinde sadece toplam kalır.
+
+Kafein `days`'teki kahve sayılarından türetilir. Mevcut frontend mantığıyla uyumlu.
 
 ---
 
@@ -204,8 +215,10 @@ health-tracker/
   - Yazma işlemleri optimistic + API'ye POST/PATCH; hata olursa geri al
 - **Giriş ekranı** (`LoginScreen`): oturum yoksa "Google ile giriş" butonu
 - **Geçmiş görünümü** (`HistoryView`): **takvim** — her günün kalori/protein toplamı
-  hücrede görünür, hücreye tıklayınca o günün detayına (yemek listesi) gidilir.
-  Varsayılan olarak son 1 ay gösterilir (veri silinmez, sadece görünüm sınırlı).
+  ve kilosu hücrede rakam olarak görünür (kalıcı snapshot'tan, tüm geçmiş için).
+  Son ~1 aydaki bir hücreye tıklayınca o günün **yemek detayı** açılır; daha eski
+  günlerde detay silinmiş olur, sadece toplam rakam gösterilir. Kilo trendi için
+  ayrıca uzun vadeli bir grafik gösterilebilir.
 - **Öğün kısayolları** (`MealPresets`): sık yenen öğünleri kaydet, tek tıkla o güne
   ekle. Her seferinde yeniden hesaplamaya/aramaya gerek kalmaz. Geçmişteki bir günü
   de "kısayola dönüştür" ile preset yapabilirsin.
@@ -252,9 +265,11 @@ Az önce eklediğimiz **export/import** özelliği migrasyon köprüsü:
   (Not: bu "ortak kimlik sağlayıcı"dır, gerçek SSO değil — her app kendi giriş
   butonunu gösterir ama Google oturumu hatırladığı için pratikte tek tık. Gerçek
   SSO ileride gerekirse ayrı bir auth servisi olarak çıkarılır.)
-- **Geçmiş görünümü: takvim.** Her gün kcal/protein toplamı, tıkla → detay.
-  Varsayılan 1 ay görünüm. **Veri silinmez** (depolama bedava, kilo trendi değerli);
-  1 ay yalnızca varsayılan görünüm sınırı.
+- **Geçmiş görünümü + retention: takvim, hibrit saklama.** Takvimde her günün
+  kcal/protein toplamı ve kilosu rakam olarak görünür (kalıcı). Gün **detayına**
+  (yemek listesi) yalnızca son ~1 ay erişilir; daha eski `food_entries` silinir
+  (DB'yi şişirmemek için). Günlük toplamlar `days` satırında snapshot olarak tutulur,
+  böylece kilo trendi ve kalori/protein geçmişi kaybolmaz.
 - **Öğün kısayolları (preset):** sık yenen öğünleri kaydet, tek tıkla ekle.
   Geçmişteki bir gün "kısayola dönüştür" ile preset olabilir.
 - **Offline: yazmaya izin ver, sonra sync (düşük öncelik).** Önce online-first
