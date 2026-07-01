@@ -672,10 +672,11 @@ body {
 }
 
 .account {
+  flex: 1 0 100%;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  margin-left: auto;
 }
 .account-email {
   color: var(--muted);
