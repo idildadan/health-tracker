@@ -1,77 +1,103 @@
-# Health Tracker — Backend + DB Planı
+# `backend` — Ortak Backend + DB Planı
 
-> Amaç: localStorage'dan kalıcı bir backend + veritabanına geçmek; verileri cihazdan
-> bağımsız saklamak, geçmişe bakabilmek (örn. "dün ne yedim"), ve app'i günlük gerçek
-> kullanıma uygun hale getirmek.
+> Amaç: Tek bir ortak backend servisi + veritabanı kurmak; health-tracker, Etsy portalı,
+> FLM portalı ve ileride yapılacak app'ler bu servisi kullansın. Veriler kalıcı olsun,
+> geçmişe bakılabilsin, app'ler günlük gerçek kullanıma uygun hale gelsin.
+>
+> **Not:** Bu doküman şimdilik health-tracker repo'sunda duruyor; yeni `backend` repo'su
+> kurulduğunda oraya taşınacak. İlk somut kullanıcı (ve migrasyon testi) health-tracker.
 
 ## 1. Mimari Kararı
 
-**Health-tracker kendi backend'ine + DB'sine sahip olur.** Etsy portalı ve diğer
-projeler ayrı kalır. Ortak olan tek katman **kimlik (Google OAuth)** — o da ayrı bir
-servis değil, tüm app'lerin aynı Google Cloud OAuth client'ını yeniden kullanması
-şeklinde paylaşılır.
+**Tek ortak backend repo'su (`backend`) + tek Postgres.** Tüm kişisel app'ler (health,
+etsy, flm, gelecek) bu servisi kullanır. **Ama veri alanları ayrıktır** — her app kendi
+Postgres schema'sında yaşar, tabloları paylaşmazlar.
 
-**Neden shared "platform backend" değil:** Sağlık takibi ile Etsy otomasyonu farklı
-domainler; tek servise koymak bug/deploy riskini ve bağımlılık çakışmasını artırır,
-asıl kullanılacak app'i geciktirir. Desenleri tekrar kullanırız, kodu değil.
+- **Ortak olan:** sunucu altyapısı, DB bağlantısı, Google OAuth, deploy, ortak yardımcılar
+- **Ayrık olan:** domain tabloları (her app kendi Postgres schema'sında), route namespace'i
+
+**Neden ortak backend (tek geliştirici için doğru):** Tek kişi birkaç küçük kişisel app
+işletiyor. Tek servis + tek DB + tek auth = çok daha az bakım ve maliyet. "Ayrı ayrı
+backend" önerisi ekip/koordinasyon bağlamında geçerli; solo'da ops tasarrufu coupling
+riskinden ağır basar. Coupling'i de schema ayrımıyla düşük tutuyoruz.
+
+**Frontend'ler ayrı repolarda kalır** (health-tracker frontend'i mevcut repo'sunda,
+etsy portalı kendi repo'sunda). Hepsi `backend`'e API çağrısı yapar.
 
 ### Stack
-- **Runtime:** Node.js + Express (mevcut `server.js` genişletilir)
-- **DB:** PostgreSQL (Railway tek tık, `DATABASE_URL` env)
+- **Runtime:** Node.js + Express (yeni `backend` repo'sunda; health-tracker'ın mevcut
+  `server.js`'indeki OFF proxy + AI meal mantığı buraya taşınır)
+- **DB:** PostgreSQL (Railway tek tık, `DATABASE_URL` env), **app başına Postgres schema**
 - **DB katmanı:** Drizzle ORM (tipli şema + migration'lar)
-- **Auth:** Google OAuth + e-posta allowlist (tek kişi: sen), oturum JWT cookie
-- **Frontend:** mevcut React PWA; localStorage yerine API çağrıları (localStorage
-  offline cache olarak kalabilir — "önce cache, sonra sync")
-- **Hosting:** Railway (mevcut servis)
+- **Auth:** Google OAuth + e-posta allowlist, **bearer token** (cross-origin için)
+- **Route namespace:** `/api/health/*`, `/api/etsy/*`, `/api/flm/*`, ortak `/api/auth/*`
+- **Frontend:** her app kendi repo'sunda; health-tracker React PWA localStorage yerine
+  `backend` API'sini çağırır (localStorage offline cache olarak kalabilir)
+- **Hosting:** Railway (yeni `backend` servisi + Postgres)
 
 ---
 
 ## 2. Kimlik / Auth
 
-### Yaklaşım: "Ortak kimlik, ayrı servis yok"
-- FLM projesinde kurulu Google Cloud OAuth client'ı **tüm app'lerde** yeniden kullan
-  (Etsy, FLM portalı, health-tracker + ileride yapılacaklar). Her app kendi redirect
-  URI'sini ekler, kendi `ALLOWED_EMAILS` allowlist'iyle erişimi kısıtlar.
-- Health-tracker'ın redirect URI'sini o client'ın "Authorized redirect URIs"
-  listesine ekle: `https://<yeni-railway-domain>/api/auth/google/callback`
-- Backend, Google'dan dönen token'ı doğrular, kullanıcının e-postasını okur.
-- **Allowlist:** yalnızca `ALLOWED_EMAILS` env'inde tanımlı e-posta(lar) girebilir
-  (şimdilik sadece senin adresin). Başka biri Google ile girse bile reddedilir.
-- Başarılı girişte backend kendi **JWT'sini** httpOnly cookie olarak set eder;
-  sonraki tüm `/api/*` istekleri bu cookie ile doğrulanır.
+### Yaklaşım: "Tek ortak kimlik, tek backend'de"
+- FLM projesinde kurulu Google Cloud OAuth client'ı **tüm app'lerde** yeniden kullanılır.
+  Ortak `backend` tek OAuth akışını barındırır; her frontend ona yönlenir.
+- Her frontend'in dönüş URL'si OAuth client'ın "Authorized redirect URIs" listesine
+  eklenir. Callback ortak: `https://<backend-railway-domain>/api/auth/google/callback`
+- Backend Google'dan dönen token'ı doğrular, e-postayı okur.
+- **Allowlist:** yalnızca `ALLOWED_EMAILS` env'indeki e-posta(lar) girebilir (şimdilik
+  sadece sen). App bazında farklı allowlist gerekirse ileride app'e özel kontrol eklenir.
+
+### Cross-origin auth — çerez yerine bearer token
+Backend ile frontend'ler farklı domain'lerde olduğu için httpOnly cookie "cross-site"
+olur ve zahmetlidir. Bunun yerine:
+- Girişte backend bir **JWT** üretir, frontend'e döner.
+- Frontend token'ı saklar (localStorage) ve her istekte `Authorization: Bearer <token>`
+  header'ıyla gönderir.
+- Backend `requireAuth` middleware'i bu header'ı doğrular.
+- CORS: backend yalnızca bilinen frontend origin'lerine izin verir (env ile allowlist).
 
 ### Akış
-1. Kullanıcı "Google ile giriş" → `/api/auth/google` → Google onay ekranı
-2. Google → `/api/auth/google/callback?code=...`
+1. Kullanıcı frontend'te "Google ile giriş" → `backend`'in `/api/auth/google`'ına gider
+2. Google onay → `/api/auth/google/callback?code=...`
 3. Backend code'u token'a çevirir, e-postayı alır, allowlist kontrolü
-4. `users` tablosunda upsert → JWT cookie set → app'e yönlendir
-5. Frontend açılışta `/api/me` ile oturumu doğrular; yoksa giriş ekranı gösterir
+4. `auth.users` tablosunda upsert → **JWT üret** → frontend'e döner (token)
+5. Frontend token'ı saklar; açılışta `/api/me` ile doğrular, yoksa giriş ekranı gösterir
 
-### Gerekli env değişkenleri
+### Gerekli env değişkenleri (backend servisi)
 ```
 DATABASE_URL=...            # Railway Postgres otomatik verir
 GOOGLE_CLIENT_ID=...        # FLM'den
 GOOGLE_CLIENT_SECRET=...    # FLM'den
-GOOGLE_REDIRECT_URI=https://.../api/auth/google/callback
+GOOGLE_REDIRECT_URI=https://<backend-domain>/api/auth/google/callback
 ALLOWED_EMAILS=idildadan@gmail.com
+ALLOWED_ORIGINS=https://<health-frontend>,https://<etsy-frontend>  # CORS
 JWT_SECRET=...              # rastgele uzun string
-ANTHROPIC_API_KEY=...       # mevcut (AI öğün ayrıştırma)
+ANTHROPIC_API_KEY=...       # AI öğün ayrıştırma (health)
 ```
 
 ---
 
 ## 3. Veritabanı Şeması
 
+Tek Postgres, **app başına Postgres schema**. Ortak kimlik `auth` schema'sında; her app
+kendi schema'sında. Tablolar app'ler arası paylaşılmaz; sadece `auth.users`'a FK ile
+bağlanırlar.
+
 ```
-users
+=== schema: auth (ortak, tüm app'ler) ===
+
+auth.users
   id            uuid PK (default gen_random_uuid)
   email         text unique not null
   name          text
   picture       text
   created_at    timestamptz default now()
 
-goals                       -- kullanıcı başına tek satır
-  user_id       uuid PK FK -> users(id)
+=== schema: health (yalnızca health-tracker) ===
+
+health.goals                -- kullanıcı başına tek satır
+  user_id       uuid PK FK -> auth.users(id)
   steps         int   default 8000
   water         int   default 2000     -- ml
   caffeine      real  default 3        -- doz
@@ -81,9 +107,9 @@ goals                       -- kullanıcı başına tek satır
   weight        real  default 70       -- kg (hedef)
   updated_at    timestamptz default now()
 
-days                        -- kullanıcı + tarih başına tek satır (KALICI, küçük)
+health.days                 -- kullanıcı + tarih başına tek satır (KALICI, küçük)
   id            uuid PK
-  user_id       uuid FK -> users(id)
+  user_id       uuid FK -> auth.users(id)
   date          date not null          -- YYYY-MM-DD (kullanıcının yerel günü)
   steps         int   default 0
   water         int   default 0
@@ -97,9 +123,9 @@ days                        -- kullanıcı + tarih başına tek satır (KALICI, 
   UNIQUE(user_id, date)
   -- caffeine türetilmiş: turkish_coffee*0.5 + filter_coffee*1.25
 
-food_entries                -- güne bağlı yemek kalemleri
+health.food_entries         -- güne bağlı yemek kalemleri
   id            uuid PK
-  user_id       uuid FK -> users(id)
+  user_id       uuid FK -> auth.users(id)
   date          date not null
   name          text not null
   grams         real                    -- null olabilir (manuel/AI kalemleri)
@@ -109,13 +135,17 @@ food_entries                -- güne bağlı yemek kalemleri
   created_at    timestamptz default now()
   INDEX(user_id, date)
 
-meal_presets                -- sık yenen öğünlerin kısayolu (tek tıkla eklemek için)
+health.meal_presets         -- sık yenen öğünlerin kısayolu (tek tıkla eklemek için)
   id            uuid PK
-  user_id       uuid FK -> users(id)
+  user_id       uuid FK -> auth.users(id)
   name          text not null            -- "Standart kahvaltı", "Antrenman sonrası"
   items         jsonb not null           -- [{name, grams, calories, protein}, ...]
   created_at    timestamptz default now()
   INDEX(user_id)
+
+=== schema: etsy, flm (ayrı, gerektiğinde) ===
+  # Her app kendi tablolarını kendi schema'sında tanımlar; health tablolarıyla
+  # ilişkileri yoktur, sadece auth.users'a bağlanırlar.
 ```
 
 **Kalori/protein toplamı — çift kayıt:** Bir yemek eklendiğinde/silindiğinde o günün
@@ -136,74 +166,90 @@ Kafein `days`'teki kahve sayılarından türetilir. Mevcut frontend mantığıyl
 
 ## 4. API Endpointleri
 
-Tümü JWT cookie ile korunur (auth endpointleri hariç).
+App bazında namespace. Ortak `/api/auth/*` hariç tümü `Authorization: Bearer <token>`
+ile korunur. Health endpointleri `/api/health/*` altında; etsy/flm ileride kendi
+namespace'inde.
 
 ```
-# Auth
+# Auth (ortak)
 GET  /api/auth/google              -> Google'a yönlendir
-GET  /api/auth/google/callback     -> token değişimi, cookie set, app'e dönüş
-POST /api/auth/logout              -> cookie temizle
-GET  /api/me                       -> oturumdaki kullanıcı / 401
+GET  /api/auth/google/callback     -> token değişimi, JWT üret + frontend'e dön
+GET  /api/me                       -> token'daki kullanıcı / 401
+
+# --- Health namespace: /api/health/* ---
 
 # Günlük veri
-GET  /api/day/:date                -> gün + yemekleri + türetilmiş toplamlar
-PATCH /api/day/:date               -> steps/water/coffee/sleep/weight güncelle (upsert)
-GET  /api/history?days=7           -> son N gün özet (grafik için)
-GET  /api/range?from=&to=          -> tarih aralığı (geçmiş görünümü / takvim)
+GET   /api/health/day/:date        -> gün + yemekleri + türetilmiş toplamlar
+PATCH /api/health/day/:date        -> steps/water/coffee/sleep/weight güncelle (upsert)
+GET   /api/health/history?days=7   -> son N gün özet (grafik için)
+GET   /api/health/range?from=&to=  -> tarih aralığı (geçmiş / takvim)
 
 # Yemekler
-POST   /api/day/:date/foods        -> yemek ekle {name, grams, calories, protein, source}
-DELETE /api/foods/:id              -> yemek sil
+POST   /api/health/day/:date/foods -> yemek ekle {name, grams, calories, protein, source}
+DELETE /api/health/foods/:id       -> yemek sil
 
 # Hedefler
-GET   /api/goals                   -> hedefleri getir
-PATCH /api/goals                   -> hedef güncelle
+GET   /api/health/goals            -> hedefleri getir
+PATCH /api/health/goals            -> hedef güncelle
 
 # Öğün kısayolları (preset)
-GET    /api/presets                -> kullanıcının kayıtlı öğün kısayolları
-POST   /api/presets                -> yeni kısayol {name, items[]} (bir günden de üretilebilir)
-DELETE /api/presets/:id            -> kısayol sil
-POST   /api/day/:date/apply-preset/:id  -> kısayoldaki tüm kalemleri o güne ekle
+GET    /api/health/presets                     -> kayıtlı öğün kısayolları
+POST   /api/health/presets                     -> yeni kısayol {name, items[]}
+DELETE /api/health/presets/:id                 -> kısayol sil
+POST   /api/health/day/:date/apply-preset/:id  -> kısayolu o güne ekle
 
-# Zaten var (korunacak)
-GET  /api/off-search?q=            -> Open Food Facts proxy
-POST /api/ai-meal                  -> Claude ile öğün ayrıştırma
+# Health yardımcı servisleri (mevcut server.js'ten taşınır)
+GET  /api/health/off-search?q=     -> Open Food Facts proxy
+POST /api/health/ai-meal           -> Claude ile öğün ayrıştırma
 
 # Migrasyon
-POST /api/import                   -> localStorage export JSON'unu DB'ye aktar
+POST /api/health/import            -> localStorage export JSON'unu DB'ye aktar
+
+# --- Etsy / FLM namespace: /api/etsy/*, /api/flm/* (ileride) ---
 ```
 
 ---
 
 ## 5. Dosya Yapısı (öneri)
 
+**İki ayrı repo:** `backend` (ortak servis) ve `health-tracker` (mevcut frontend repo'su).
+
 ```
-health-tracker/
-  server/
-    index.js            # express app, route montaj
-    db/
-      schema.js         # drizzle şema
-      client.js         # drizzle + pg pool
-      migrate.js        # migration runner
-    auth/
-      google.js         # OAuth akışı
-      middleware.js     # JWT doğrulama (requireAuth)
-    routes/
+backend/                    # YENİ repo — ortak servis
+  index.js                  # express app, CORS, route montaj
+  db/
+    client.js               # drizzle + pg pool
+    migrate.js              # migration runner
+    schema/
+      auth.js               # auth.users (ortak)
+      health.js             # health.* tablolar
+      etsy.js               # (ileride) etsy.* tablolar
+  auth/
+    google.js               # OAuth akışı (ortak)
+    middleware.js           # requireAuth — Bearer token doğrulama
+  modules/
+    health/
       day.js
       foods.js
       goals.js
-      off.js            # mevcut OFF proxy taşınır
-      ai.js             # mevcut ai-meal taşınır
-      importExport.js
-  src/                  # mevcut frontend
+      presets.js
+      off.js                # OFF proxy (health-tracker'dan taşınır)
+      ai.js                 # ai-meal (health-tracker'dan taşınır)
+      import.js
+    etsy/                   # (ileride)
+    flm/                    # (ileride)
+  drizzle/                  # migration dosyaları
+  BACKEND_PLAN.md           # bu doküman (buraya taşınır)
+
+health-tracker/             # MEVCUT repo — sadece frontend'e evrilir
+  src/
     api/
-      client.js         # fetch wrapper (401'de login'e yönlendir)
-      useDailyData.js   # localStorage yerine API kullanacak şekilde revize
+      client.js             # fetch wrapper: Bearer token ekler, 401'de login'e yönlendir
+      useDailyData.js       # localStorage yerine backend API'sini kullanır
     components/
-      LoginScreen.jsx   # yeni: Google ile giriş
-      HistoryView.jsx   # yeni: geçmiş günler / takvim
-  drizzle/              # migration dosyaları
-  BACKEND_PLAN.md       # bu doküman
+      LoginScreen.jsx       # yeni: Google ile giriş
+      HistoryView.jsx       # yeni: takvim / geçmiş
+      MealPresets.jsx       # yeni: öğün kısayolları
 ```
 
 ---
@@ -230,49 +276,50 @@ health-tracker/
 
 Az önce eklediğimiz **export/import** özelliği migrasyon köprüsü:
 1. Mevcut app'ten "💾 Yedek indir" ile JSON al
-2. Yeni sürümde giriş yap
-3. "📥 Yedek yükle" → frontend JSON'u `POST /api/import`'a gönderir
-4. Backend `days` + `food_entries` + `goals` tablolarına yazar (upsert)
+2. Yeni sürümde Google ile giriş yap
+3. "📥 Yedek yükle" → frontend JSON'u `POST /api/health/import`'a gönderir
+4. Backend `health.days` + `health.food_entries` + `health.goals`'a yazar (upsert)
 
 ---
 
 ## 8. Aşamalı Uygulama Sırası
 
-0. **Yeni repo oluştur** — `health-tracker` adında temiz bir full-stack repo;
-   mevcut workshop repo'sundan yeniden kullanılacak kodu (React app, OFF proxy,
-   AI meal, food DB) taşı. Bu `BACKEND_PLAN.md`'yi de yeni repoya kopyala.
-1. **Postgres kurulumu** — Railway'de DB servisi ekle, `DATABASE_URL` bağla
-2. **Drizzle şema + ilk migration** — tabloları oluştur (meal_presets dahil)
-3. **Google OAuth** — FLM client'ına redirect URI ekle, auth akışı + `requireAuth`
-4. **API endpointleri** — day / foods / goals / history / range / presets
-5. **Mevcut endpointleri taşı** — off-search + ai-meal `routes/`e
-6. **Frontend auth** — login ekranı + 401 yönlendirme
-7. **Frontend veri katmanı** — `useDailyData` API'ye bağla (offline cache)
-8. **Import** — localStorage yedeğini DB'ye aktarma
-9. **Geçmiş görünümü** — takvim ekranı (günlük kcal/protein + detay)
-10. **Öğün kısayolları** — preset kaydet/uygula UI
-11. **Test + deploy** — uçtan uca doğrulama, Railway'e çıkış
+**A. Ortak backend (yeni `backend` repo'su)**
+0. **`backend` repo'sunu oluştur** — Express iskeleti, CORS, bu `BACKEND_PLAN.md`'yi taşı
+1. **Railway'de yeni servis + Postgres** — `DATABASE_URL` bağla
+2. **Drizzle kurulumu + schema'lar** — `auth`, `health` schema'ları + ilk migration
+3. **Google OAuth (ortak)** — FLM client'ına backend callback URI'si ekle, Bearer token
+   üretimi + `requireAuth` middleware + CORS origin allowlist
+4. **Health modülü endpointleri** — day / foods / goals / history / range / presets
+5. **Mevcut servisleri taşı** — health-tracker `server.js`'teki off-search + ai-meal →
+   `modules/health/`
+6. **Import endpoint** — localStorage yedeğini DB'ye aktarma
+
+**B. Health-tracker frontend (mevcut repo)**
+7. **API istemci katmanı** — `api/client.js` (Bearer token), `useDailyData` backend'e bağlı
+8. **Giriş ekranı** — Google ile giriş + 401 yönlendirme
+9. **Import akışı** — mevcut yedeği backend'e aktar, doğrula
+10. **Geçmiş görünümü** — takvim (günlük kcal/protein + kilo, son 1 ay detay)
+11. **Öğün kısayolları** — preset kaydet/uygula UI
+12. **Test + deploy** — uçtan uca doğrulama, Railway'e çıkış
 
 ---
 
 ## 9. Kararlar (kesinleşti)
 
-- **DB katmanı: Drizzle ORM.** Tip güvenliği + migration'ı Prisma ağırlığı olmadan
-  verir, SQL'e yakın kalır. Aynı desen diğer projelerde de kullanılabilir.
-- **Google OAuth: FLM'nin OAuth client'ı tüm app'lerde ortak.** Etsy, FLM portalı,
-  health-tracker ve ileride yapılacak app'ler aynı client'ı kullanır; her app kendi
-  redirect URI'sini ekler ve kendi e-posta allowlist'iyle erişimi kısıtlar.
-  (Not: bu "ortak kimlik sağlayıcı"dır, gerçek SSO değil — her app kendi giriş
-  butonunu gösterir ama Google oturumu hatırladığı için pratikte tek tık. Gerçek
-  SSO ileride gerekirse ayrı bir auth servisi olarak çıkarılır.)
-- **Geçmiş görünümü + retention: takvim, hibrit saklama.** Takvimde her günün
-  kcal/protein toplamı ve kilosu rakam olarak görünür (kalıcı). Gün **detayına**
-  (yemek listesi) yalnızca son ~1 ay erişilir; daha eski `food_entries` silinir
-  (DB'yi şişirmemek için). Günlük toplamlar `days` satırında snapshot olarak tutulur,
-  böylece kilo trendi ve kalori/protein geçmişi kaybolmaz.
+- **Mimari: tek ortak `backend` repo'su + tek Postgres.** health/etsy/flm hepsi bu
+  servisi kullanır; veri app başına ayrı **Postgres schema**'sında (tablolar paylaşılmaz).
+  Tek geliştirici için ops/maliyet tasarrufu coupling riskinden ağır basar.
+- **DB katmanı: Drizzle ORM.** Tip güvenliği + migration, Prisma ağırlığı olmadan.
+- **Veri ayrımı: Postgres schema'lar.** `auth` (ortak), `health`, `etsy`, `flm` (ayrı).
+- **Google OAuth: FLM client'ı tüm app'lerde ortak,** ortak backend'de tek akış.
+  Erişim `ALLOWED_EMAILS` allowlist (şimdilik tek kişi).
+- **Auth taşıma: Bearer token** (cross-origin olduğu için cookie değil). Frontend
+  token'ı saklar, `Authorization` header'ıyla gönderir. CORS origin allowlist ile korunur.
+- **Route namespace:** `/api/health/*`, `/api/etsy/*`, `/api/flm/*`, ortak `/api/auth/*`.
+- **Geçmiş + retention: takvim, hibrit saklama.** Günlük kcal/protein toplamı + kilo
+  kalıcı (days snapshot); yemek detayı (food_entries) ~35 gün sonra silinir.
 - **Öğün kısayolları (preset):** sık yenen öğünleri kaydet, tek tıkla ekle.
-  Geçmişteki bir gün "kısayola dönüştür" ile preset olabilir.
-- **Offline: yazmaya izin ver, sonra sync (düşük öncelik).** Önce online-first
-  çalışan sürümü çıkar, offline sync sonradan eklenebilir.
-- **Repo: YENİ repo (full-stack).** Frontend + backend + DB aynı repoda, tek deploy.
-  Mevcut workshop repo'su referans kalır; yeni repo temiz başlar.
+- **Offline: yazmaya izin ver, sonra sync (düşük öncelik).** Önce online-first.
+- **Repolar: `backend` YENİ (ortak servis+DB), `health-tracker` MEVCUT repo frontend'e
+  evrilir.** Frontend'ler ayrı repolarda kalır, ortak backend'e API ile bağlanır.
